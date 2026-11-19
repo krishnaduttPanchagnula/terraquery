@@ -1,0 +1,15 @@
+# Build output
+/dist/
+/terraquery
+*.exe
+
+# Local database
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

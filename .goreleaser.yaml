@@ -1,0 +1,63 @@
+version: 2
+project_name: terraquery
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: terraquery
+    main: .
+    binary: terraquery
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .Date }}
+
+archives:
+  - id: terraquery
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: terraquery
+    directory: Formula
+    repository:
+      owner: krishnaduttPanchagnula
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/krishnaduttPanchagnula/terraquery
+    description: Cross-state Terraform dependency resolver with a visual dashboard
+    license: MIT
+    skip_upload: true
+
+release:
+  github:
+    owner: krishnaduttPanchagnula
+    name: terraquery
