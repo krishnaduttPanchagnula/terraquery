@@ -175,9 +175,16 @@ Layout: `main.go` (CLI/server), `state/` (parser + sanitizer), `resolver/`
 ## Releases
 
 [GoReleaser](https://goreleaser.com/) builds Linux, macOS and Windows archives
-and a Homebrew cask. Pushing a `v*` tag triggers a release; the cask is
-published to `krishnaduttPanchagnula/homebrew-tap` and a copy is kept in
-`Casks/terraquery.rb` in this repo.
+and a Homebrew cask. To cut a release:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+GITHUB_TOKEN=... HOMEBREW_TAP_GITHUB_TOKEN=... goreleaser release --clean
+```
+
+The cask is published to `krishnaduttPanchagnula/homebrew-tap` and a copy is
+kept in `Casks/terraquery.rb` in this repo. Validate the config locally with
+`goreleaser check` and `goreleaser release --snapshot --clean`.
 
 ## Icon attribution
 
