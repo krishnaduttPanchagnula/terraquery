@@ -189,6 +189,41 @@ func TestResolveAllRestoresEdges(t *testing.T) {
 	}
 }
 
+func TestScopesPersisted(t *testing.T) {
+	d := openTemp(t)
+	raw := `{"version":4,"serial":1,"lineage":"x","outputs":{},"resources":[
+	  {"mode":"managed","type":"aws_sqs_queue","name":"q","instances":[{"attributes":{"arn":"arn:aws:sqs:us-east-1:111122223333:q"}}]},
+	  {"mode":"managed","type":"aws_iam_role","name":"cross","instances":[{"attributes":{"arn":"arn:aws:iam::444455556666:role/cross"}}]},
+	  {"mode":"managed","type":"google_storage_bucket","name":"b","instances":[{"attributes":{"id":"projects/acme-prod/b"}}]}
+	]}`
+	f, err := state.Parse([]byte(raw), "mixed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Ingest([]resolver.Source{{Name: "mixed", File: f}}); err != nil {
+		t.Fatal(err)
+	}
+	states, err := d.States()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || len(states[0].Accounts) != 3 {
+		t.Fatalf("state scopes: %+v", states)
+	}
+	resources, err := d.Resources("mixed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, r := range resources {
+		got[r.Address] = r.ScopeKind + ":" + r.ScopeID
+	}
+	if got["aws_sqs_queue.q"] != "aws:111122223333" ||
+		got["google_storage_bucket.b"] != "gcp:acme-prod" {
+		t.Fatalf("resource scopes: %+v", got)
+	}
+}
+
 func TestResourcesList(t *testing.T) {
 	d := openTemp(t)
 	if err := d.Ingest(sources(t)); err != nil {

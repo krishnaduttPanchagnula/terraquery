@@ -75,7 +75,12 @@ the columns stack; below 900px the nav rail collapses to icons.
   demo states with cross-references), and **Upload files** (drag/drop or pick).
 - **Overview** stat cards plus a donut chart of evidence by kind.
 - **State dropdown with checkboxes** shows/hides statefiles across the graph,
-  tables and charts. Each row has a button to inspect that state.
+  tables and charts. States are grouped by **cloud account / GCP project /
+  Azure subscription** (derived from ARNs, `projects/...` ids and
+  `/subscriptions/...` ids), so multiple accounts are easy to tell apart and
+  can be toggled as a group. Each state row has a button to inspect it.
+- Account badges appear on state boxes, resource tiles, service groups and in
+  the top-bar count, including states that reference more than one account.
 - **Free-flowing canvas**: drag to pan, scroll or the zoom buttons to zoom,
   reset with the fit button, and use the back icon in the canvas corner to
   return to all states.
@@ -138,7 +143,8 @@ all edges are rebuilt from the full state set in one transaction.
 ## Schema
 
 - `states(id, name UNIQUE, filename, version, serial, lineage, raw, ingested_at)`
-- `resources(id, state_id, address, module, mode, type, name, provider, attributes)`
+- `state_scopes(state_id, kind, id)` — cloud accounts/projects/subscriptions per state
+- `resources(id, state_id, address, module, mode, type, name, provider, attributes, scope_kind, scope_id)`
 - `edges(id, batch, from_state, from_addr, from_attr, to_state, to_addr, kind, matched, confidence)`
 - view `dependencies` — state-level rollup at the default 0.5 threshold
 

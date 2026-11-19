@@ -167,7 +167,7 @@ func TestIndexReferencesEmbeddedAssets(t *testing.T) {
 	}
 	html := string(index)
 	for _, ref := range []string{
-		`href="style.css?v=14"`, `src="app.js?v=14"`, `src="icons/aws.svg"`,
+		`href="style.css?v=15"`, `src="app.js?v=15"`, `src="icons/aws.svg"`,
 		`id="services"`, `id="graphHint"`,
 		`id="enlargeBtn"`, `id="archFull"`,
 		`id="graphWrap"`, `id="zoomInBtn"`, `id="canvasBackBtn"`,
@@ -178,6 +178,7 @@ func TestIndexReferencesEmbeddedAssets(t *testing.T) {
 		`class="col-left"`, `class="col-right"`, `id="graphCountTop"`,
 		`class="icon-sprite"`, `id="i-network"`, `id="i-maximize"`, `id="i-plus"`,
 		`id="themeBtn"`, `id="themeIcon"`, `id="i-sun"`, `id="i-moon"`,
+		`id="accountCountTop"`,
 	} {
 		if !strings.Contains(html, ref) {
 			t.Errorf("index.html missing %s", ref)
@@ -201,6 +202,7 @@ func TestIndexReferencesEmbeddedAssets(t *testing.T) {
 		`service-group`, `grouped by statefile`, `trapFocus`, `selectTab`,
 		`aria-busy`, `srStatus`, `aria-label`, `location.hash`, `history.replaceState`,
 		`renderStateFilter`, `closeStateMenu`, `canvasBackBtn`,
+		`accountsFor`, `accountBadge`, `shortAccount`, `scope_kind`,
 		`applyTheme`, `savedTheme`, `prefers-color-scheme`,
 	} {
 		if !strings.Contains(string(js), ref) {

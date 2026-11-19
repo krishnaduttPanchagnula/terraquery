@@ -153,6 +153,7 @@ td.num{text-align:right;font-family:ui-monospace,monospace;font-variant-numeric:
 .outer-title{fill:var(--text);font:600 14px ui-sans-serif,system-ui}
 .tile-label{fill:var(--tile-text);font:11px ui-sans-serif,system-ui;text-anchor:middle}
 .tile-sub{fill:var(--muted);font:9px ui-monospace,monospace;text-anchor:middle}
+.tile-scope{fill:var(--accent);font:9px ui-monospace,monospace}
 .flow-line{stroke:var(--line-strong)}
 .flow-label{fill:var(--warn)}
 .arrow-marker{fill:var(--muted)}
@@ -176,6 +177,20 @@ td.num{text-align:right;font-family:ui-monospace,monospace;font-variant-numeric:
 .state-check .drill{background:transparent;border:0;padding:2px;min-height:0;color:var(--muted)}
 .state-check .drill .icon{width:13px;height:13px}
 .state-check.is-hidden{opacity:.5}
+.account-group{display:flex;align-items:center;gap:8px;padding:8px 8px 4px;
+  border-top:1px solid var(--line);margin-top:4px;font-size:11px}
+.account-group:first-of-type{border-top:0;margin-top:0}
+.account-group input{accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex:none}
+.account-group .meta{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums}
+.account-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:99px;
+  background:var(--panel);border:1px solid var(--line);color:var(--muted);
+  font:10px ui-monospace,SFMono-Regular,Menlo,monospace;min-width:0}
+.account-badge img{width:12px;height:12px}
+.account-badge span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.state-check .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-all{width:100%;background:transparent;border:0;color:var(--accent);
+  justify-content:flex-start;padding:6px 8px;font-size:11px}
+.menu-all:hover{background:var(--hover)}
 .node{cursor:pointer}
 .graphwrap{position:relative;border:1px solid var(--line);border-radius:7px;background:var(--bg);
   height:min(68vh,720px);overflow:hidden;cursor:grab;touch-action:none;user-select:none}

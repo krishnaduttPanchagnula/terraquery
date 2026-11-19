@@ -136,6 +136,23 @@ function providerOf(name) {
   return state.states.find((s) => s.name === name)?.provider || "unknown";
 }
 
+const accountKey = (a) => `${a.kind}:${a.id}`;
+const shortAccount = (a) => a.kind === "unknown" ? "unspecified"
+  : `${a.kind}:${a.id.length > 14 ? a.id.slice(0, 12) + "…" : a.id}`;
+
+function accountsFor(name) {
+  const found = state.states.find((s) => s.name === name)?.accounts;
+  return found?.length ? found : [{ kind: "unknown", id: "unspecified" }];
+}
+
+function accountBadge(a) {
+  const n = el("span", { class: "account-badge" });
+  n.appendChild(icon(a.kind === "unknown" ? "unknown" : a.kind));
+  n.appendChild(el("span", {}, shortAccount(a)));
+  n.title = `${a.kind} · ${a.id}`;
+  return n;
+}
+
 function render() {
   const { states, deps, edges } = state;
   $("statStates").textContent = states.length;
@@ -147,6 +164,9 @@ function render() {
   $("edgeCount").textContent = edges.length;
   $("graphCount").textContent = `${state.graph?.edges.length || 0} links`;
   $("graphCountTop").textContent = `${states.length} states`;
+  const accounts = new Set();
+  for (const s of states) for (const a of accountsFor(s.name)) accounts.add(accountKey(a));
+  $("accountCountTop").textContent = `· ${accounts.size} accounts`;
 
   renderStateFilter();
   renderDonut(edges);
@@ -182,24 +202,58 @@ function renderStateFilter() {
     box.appendChild(el("p", { class: "hint" }, "No statefiles yet."));
     return;
   }
+
+  const allBtn = el("button", { type: "button", class: "menu-all" }, "Show all statefiles");
+  allBtn.addEventListener("click", () => { state.hidden.clear(); loadAll(); });
+  box.appendChild(allBtn);
+
+  // Group states by the cloud account/project/subscription they reference.
+  const groups = new Map();
   for (const s of state.states) {
-    const row = el("div", { class: visible(s.name) ? "state-check" : "state-check is-hidden" });
-    const cb = el("input", { type: "checkbox", "aria-label": `Show ${s.name}` });
-    cb.checked = visible(s.name);
+    for (const a of accountsFor(s.name)) {
+      const k = accountKey(a);
+      if (!groups.has(k)) groups.set(k, { scope: a, names: new Set() });
+      groups.get(k).names.add(s.name);
+    }
+  }
+  for (const [, group] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const names = [...group.names];
+    const shownInGroup = names.filter(visible).length;
+    const head = el("div", { class: "account-group" });
+    const cb = el("input", { type: "checkbox", "aria-label": `Show all states in ${shortAccount(group.scope)}` });
+    cb.checked = shownInGroup === names.length;
+    cb.indeterminate = shownInGroup > 0 && shownInGroup < names.length;
     cb.addEventListener("change", () => {
-      if (cb.checked) state.hidden.delete(s.name); else state.hidden.add(s.name);
+      for (const n of names) {
+        if (cb.checked) state.hidden.delete(n); else state.hidden.add(n);
+      }
       loadAll();
     });
-    row.appendChild(cb);
-    row.appendChild(icon(s.provider));
-    row.appendChild(el("span", { class: "name" }, s.name));
-    const drill = el("button", {
-      type: "button", class: "drill", title: `Inspect ${s.name}`, "aria-label": `Inspect ${s.name}`,
-    });
-    drill.appendChild(svgIcon("i-arrow-left"));
-    drill.addEventListener("click", () => { state.drill = s.name; closeStateMenu(); render(); });
-    row.appendChild(drill);
-    box.appendChild(row);
+    head.appendChild(cb);
+    head.appendChild(accountBadge(group.scope));
+    head.appendChild(el("span", { class: "meta" }, `${shownInGroup}/${names.length}`));
+    box.appendChild(head);
+
+    for (const name of names.sort()) {
+      const s = state.states.find((x) => x.name === name);
+      const row = el("div", { class: visible(name) ? "state-check" : "state-check is-hidden" });
+      const scb = el("input", { type: "checkbox", "aria-label": `Show ${name}` });
+      scb.checked = visible(name);
+      scb.addEventListener("change", () => {
+        if (scb.checked) state.hidden.delete(name); else state.hidden.add(name);
+        loadAll();
+      });
+      row.appendChild(scb);
+      row.appendChild(icon(s.provider));
+      row.appendChild(el("span", { class: "name" }, name));
+      const drill = el("button", {
+        type: "button", class: "drill", title: `Inspect ${name}`, "aria-label": `Inspect ${name}`,
+      });
+      drill.appendChild(svgIcon("i-arrow-left"));
+      drill.addEventListener("click", () => { state.drill = name; closeStateMenu(); render(); });
+      row.appendChild(drill);
+      box.appendChild(row);
+    }
   }
 }
 
@@ -362,10 +416,10 @@ function renderGraph(g) {
   const layers = {};
   for (const n of nodes) (layers[depth[n.id]] ||= []).push(n.id);
 
-  const H = Math.max(260, 120 * Math.max(1, ...Object.values(layers).map((l) => l.length)));
+  const H = Math.max(260, 130 * Math.max(1, ...Object.values(layers).map((l) => l.length)));
   const W = Math.max(700, 300 * Object.keys(layers).length);
   setBaseView(svg, W, H);
-  const nw = 190, nh = 60, gapX = 280;
+  const nw = 190, nh = 74, gapX = 280;
   const pos = {};
   for (const [d, ids] of Object.entries(layers)) {
     ids.sort();
@@ -383,8 +437,10 @@ function renderGraph(g) {
       stroke: PROVIDER_COLORS[provider] || "#8b98a5" }));
     g2.appendChild(svgImage(`/icons/${provider}.svg`, { x: p.x + 11, y: p.y + 18,
       width: 24, height: 24 }));
-    g2.appendChild(svgEl("text", { x: p.x + 43, y: p.y + 26 }, n.id));
-    g2.appendChild(svgEl("text", { x: p.x + 43, y: p.y + 43, class: "small" }, `${n.resources} resources →`));
+    g2.appendChild(svgEl("text", { x: p.x + 43, y: p.y + 24 }, n.id));
+    g2.appendChild(svgEl("text", { x: p.x + 43, y: p.y + 40, class: "small" }, `${n.resources} resources →`));
+    g2.appendChild(svgEl("text", { x: p.x + 12, y: p.y + 60, class: "small" },
+      accountsFor(n.id).map(shortAccount).join("  ·  ")));
     g2.setAttribute("tabindex", "0");
     g2.setAttribute("role", "button");
     g2.setAttribute("aria-label", `Inspect ${n.id}, ${n.resources} resources`);
@@ -562,6 +618,11 @@ function renderResourceGraph(svg, owner) {
     g2.appendChild(svgEl("text", { x: cx, y: p.y + 58, class: "tile-label" }, label));
     const sub = n.type.replace(/^(aws|google|azurerm)_/, "").slice(0, 18);
     g2.appendChild(svgEl("text", { x: cx, y: p.y + 71, class: "tile-sub" }, n.local ? sub : n.owner));
+    const src = byKey.get(n.key);
+    if (src?.scope_kind) {
+      g2.appendChild(svgEl("text", { class: "tile-scope", x: p.x + tileW - 14, y: p.y + 14,
+        "text-anchor": "end" }, shortAccount({ kind: src.scope_kind, id: src.scope_id })));
+    }
     g2.appendChild(svgEl("title", {}, `${n.owner} · ${n.address} · ${n.type}`));
     const related = lines.filter((l) => l.from === n.key || l.to === n.key);
     const showDetail = () => {
@@ -609,6 +670,7 @@ function renderServices() {
     const head = el("button", { type: "button", class: "service-group-head" });
     head.appendChild(icon(providerOf(owner)));
     head.appendChild(el("span", { class: "owner" }, owner));
+    for (const a of accountsFor(owner)) head.appendChild(accountBadge(a));
     head.appendChild(el("span", { class: "meta" }, `${total} resources · ${types.size} types`));
     head.addEventListener("click", () => { state.drill = owner; render(); });
     group.appendChild(head);

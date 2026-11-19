@@ -111,6 +111,52 @@ func Leaves(v any, path string, fn func(path, val string)) {
 	}
 }
 
+var (
+	arnAccount    = regexp.MustCompile(`^arn:aws[a-z-]*:([^:]*):[^:]*:(\d{12}):`)
+	gcpProject    = regexp.MustCompile(`(?:^|/)projects/([a-z][a-z0-9-]{4,28}[a-z0-9])/`) // e.g. projects/acme-prod/
+	azureSub      = regexp.MustCompile(`(?i)/subscriptions/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})`)
+	bareAccountID = regexp.MustCompile(`^(\d{12})$`)
+)
+
+// Scope identifies the cloud account/project/subscription a resource lives in.
+type Scope struct {
+	Kind string `json:"kind"` // aws | gcp | azure
+	ID   string `json:"id"`
+}
+
+// Scopes reads the identifiers in attrs and returns the distinct cloud
+// accounts referenced there. Secret-looking values are skipped by Leaves.
+func Scopes(attrs map[string]any) []Scope {
+	seen := map[Scope]bool{}
+	Leaves(attrs, "", func(path, v string) {
+		if m := arnAccount.FindStringSubmatch(v); m != nil {
+			seen[Scope{"aws", m[2]}] = true
+		}
+		if m := azureSub.FindStringSubmatch(v); m != nil {
+			seen[Scope{"azure", strings.ToLower(m[1])}] = true
+		}
+		if m := gcpProject.FindStringSubmatch(v); m != nil {
+			seen[Scope{"gcp", m[1]}] = true
+		}
+		if strings.Contains(strings.ToLower(path), "account") {
+			if m := bareAccountID.FindStringSubmatch(v); m != nil {
+				seen[Scope{"aws", m[1]}] = true
+			}
+		}
+	})
+	out := make([]Scope, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
 // scrub returns a deep copy of v with secret-looking keys removed.
 func scrub(v any) any {
 	switch t := v.(type) {

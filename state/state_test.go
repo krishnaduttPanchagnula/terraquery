@@ -25,6 +25,32 @@ func TestLeavesSkipsSecrets(t *testing.T) {
 	}
 }
 
+func TestScopes(t *testing.T) {
+	attrs := map[string]any{
+		"arn":         "arn:aws:sqs:us-east-1:111122223333:orders",
+		"account_id":  "444455556666",
+		"id":          "/subscriptions/12345678-1234-1234-1234-123456789012/resourceGroups/rg/providers/Microsoft.Web/sites/app",
+		"self_link":   "https://www.googleapis.com/compute/v1/projects/acme-prod/zones/us-central1-a/instances/i",
+		"description": "arn:aws:s3:::shared-bucket has no account",
+		"random":      "999999999999",
+	}
+	got := Scopes(attrs)
+	want := map[Scope]bool{
+		{"aws", "111122223333"}:                           true,
+		{"aws", "444455556666"}:                           true,
+		{"azure", "12345678-1234-1234-1234-123456789012"}: true,
+		{"gcp", "acme-prod"}:                              true,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Scopes = %+v, want %+v", got, want)
+	}
+	for _, sc := range got {
+		if !want[sc] {
+			t.Errorf("unexpected scope %+v", sc)
+		}
+	}
+}
+
 func TestSanitized(t *testing.T) {
 	raw := []byte(`{"version":4,"serial":1,"lineage":"x","outputs":{
 		"leak":{"value":"topsecret","sensitive":true},

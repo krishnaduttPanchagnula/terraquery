@@ -41,7 +41,15 @@ CREATE TABLE IF NOT EXISTS resources (
   name       TEXT NOT NULL DEFAULT '',
   provider   TEXT NOT NULL DEFAULT '',
   attributes TEXT NOT NULL DEFAULT '{}',
+  scope_kind TEXT NOT NULL DEFAULT '',
+  scope_id   TEXT NOT NULL DEFAULT '',
   UNIQUE(state_id, address)
+);
+CREATE TABLE IF NOT EXISTS state_scopes (
+  state_id INTEGER NOT NULL REFERENCES states(id) ON DELETE CASCADE,
+  kind     TEXT NOT NULL,
+  id       TEXT NOT NULL,
+  PRIMARY KEY(state_id, kind, id)
 );
 CREATE TABLE IF NOT EXISTS edges (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,6 +103,10 @@ func Open(path string) (*DB, error) {
 		w.Close()
 		return nil, err
 	}
+	if err := migrate(w); err != nil {
+		w.Close()
+		return nil, err
+	}
 
 	ro := (&url.URL{Scheme: "file", Path: abs, RawQuery: "mode=ro"}).String()
 	r, err := sql.Open("sqlite", ro)
@@ -103,6 +115,38 @@ func Open(path string) (*DB, error) {
 		return nil, err
 	}
 	return &DB{w: w, r: r, path: abs}, nil
+}
+
+// migrate adds columns introduced after the first release. CREATE TABLE
+// IF NOT EXISTS alone cannot alter an existing table.
+func migrate(db *sql.DB) error {
+	rows, err := db.Query("PRAGMA table_info(resources)")
+	if err != nil {
+		return err
+	}
+	has := map[string]bool{}
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, typ string
+		var def any
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &def, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		has[name] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, col := range []string{"scope_kind", "scope_id"} {
+		if !has[col] {
+			if _, err := db.Exec("ALTER TABLE resources ADD COLUMN " + col + " TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (d *DB) Close() error {
@@ -144,11 +188,15 @@ func (d *DB) Ingest(srcs []resolver.Source) error {
 		if _, err := tx.Exec("DELETE FROM resources WHERE state_id=?", id); err != nil {
 			return err
 		}
-		stmt, err := tx.Prepare(`INSERT INTO resources(state_id,address,module,mode,type,name,provider,attributes)
-			VALUES(?,?,?,?,?,?,?,?)`)
+		if _, err := tx.Exec("DELETE FROM state_scopes WHERE state_id=?", id); err != nil {
+			return err
+		}
+		stmt, err := tx.Prepare(`INSERT INTO resources(state_id,address,module,mode,type,name,provider,attributes,scope_kind,scope_id)
+			VALUES(?,?,?,?,?,?,?,?,?,?)`)
 		if err != nil {
 			return err
 		}
+		scopes := map[state.Scope]bool{}
 		for _, r := range clean.Resources {
 			for _, inst := range r.Instances {
 				attrs, err := json.Marshal(inst.Attributes)
@@ -156,8 +204,16 @@ func (d *DB) Ingest(srcs []resolver.Source) error {
 					stmt.Close()
 					return err
 				}
+				found := state.Scopes(inst.Attributes)
+				kind, sid := "", ""
+				if len(found) > 0 {
+					kind, sid = found[0].Kind, found[0].ID
+				}
+				for _, sc := range found {
+					scopes[sc] = true
+				}
 				_, err = stmt.Exec(id, r.Address(inst.IndexKey), r.Module, r.Mode,
-					r.Type, r.Name, r.Provider, string(attrs))
+					r.Type, r.Name, r.Provider, string(attrs), kind, sid)
 				if err != nil {
 					stmt.Close()
 					return err
@@ -165,6 +221,12 @@ func (d *DB) Ingest(srcs []resolver.Source) error {
 			}
 		}
 		stmt.Close()
+		for sc := range scopes {
+			if _, err := tx.Exec("INSERT OR IGNORE INTO state_scopes(state_id,kind,id) VALUES(?,?,?)",
+				id, sc.Kind, sc.ID); err != nil {
+				return err
+			}
+		}
 	}
 
 	all, err := loadSources(tx)
@@ -250,14 +312,15 @@ func (d *DB) ResolveAll() error {
 }
 
 type StateInfo struct {
-	Name       string `json:"name"`
-	Filename   string `json:"filename"`
-	Provider   string `json:"provider"`
-	Version    int    `json:"version"`
-	Serial     int    `json:"serial"`
-	Lineage    string `json:"lineage"`
-	Resources  int    `json:"resources"`
-	IngestedAt string `json:"ingested_at"`
+	Name       string        `json:"name"`
+	Filename   string        `json:"filename"`
+	Provider   string        `json:"provider"`
+	Accounts   []state.Scope `json:"accounts"`
+	Version    int           `json:"version"`
+	Serial     int           `json:"serial"`
+	Lineage    string        `json:"lineage"`
+	Resources  int           `json:"resources"`
+	IngestedAt string        `json:"ingested_at"`
 }
 
 func (d *DB) States() ([]StateInfo, error) {
@@ -278,13 +341,37 @@ func (d *DB) States() ([]StateInfo, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var s StateInfo
+		s.Accounts = []state.Scope{}
 		if err := rows.Scan(&s.Name, &s.Filename, &s.Provider, &s.Version, &s.Serial,
 			&s.Lineage, &s.IngestedAt, &s.Resources); err != nil {
 			return nil, err
 		}
 		out = append(out, s)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		scopes, err := d.r.Query(`SELECT kind, id FROM state_scopes
+			WHERE state_id=(SELECT id FROM states WHERE name=?) ORDER BY kind, id`, out[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		for scopes.Next() {
+			var sc state.Scope
+			if err := scopes.Scan(&sc.Kind, &sc.ID); err != nil {
+				scopes.Close()
+				return nil, err
+			}
+			out[i].Accounts = append(out[i].Accounts, sc)
+		}
+		scopes.Close()
+		if err := scopes.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func splitKinds(s string) []string {
@@ -343,18 +430,20 @@ func (d *DB) Edges(min float64, limit int) ([]resolver.Edge, error) {
 
 // ResourceInfo is one managed/data resource instance, with its owning state.
 type ResourceInfo struct {
-	State   string `json:"state"`
-	Address string `json:"address"`
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Mode    string `json:"mode"`
+	State     string `json:"state"`
+	Address   string `json:"address"`
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	Mode      string `json:"mode"`
+	ScopeKind string `json:"scope_kind"`
+	ScopeID   string `json:"scope_id"`
 }
 
 // Resources returns every resource instance, or just one state's when state
 // is non-empty.
 func (d *DB) Resources(state string) ([]ResourceInfo, error) {
 	out := []ResourceInfo{}
-	rows, err := d.r.Query(`SELECT s.name, r.address, r.type, r.name, r.mode
+	rows, err := d.r.Query(`SELECT s.name, r.address, r.type, r.name, r.mode, r.scope_kind, r.scope_id
 		FROM resources r JOIN states s ON s.id = r.state_id
 		WHERE ? = '' OR s.name = ?
 		ORDER BY s.name, r.address`, state, state)
@@ -364,7 +453,8 @@ func (d *DB) Resources(state string) ([]ResourceInfo, error) {
 	defer rows.Close()
 	for rows.Next() {
 		var r ResourceInfo
-		if err := rows.Scan(&r.State, &r.Address, &r.Type, &r.Name, &r.Mode); err != nil {
+		if err := rows.Scan(&r.State, &r.Address, &r.Type, &r.Name, &r.Mode,
+			&r.ScopeKind, &r.ScopeID); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
