@@ -175,9 +175,9 @@ Layout: `main.go` (CLI/server), `state/` (parser + sanitizer), `resolver/`
 ## Releases
 
 [GoReleaser](https://goreleaser.com/) builds Linux, macOS and Windows archives
-and a Homebrew formula. Pushing a `v*` tag triggers a release; the formula is
+and a Homebrew cask. Pushing a `v*` tag triggers a release; the cask is
 published to `krishnaduttPanchagnula/homebrew-tap` and a copy is kept in
-`Formula/terraquery.rb` in this repo.
+`Casks/terraquery.rb` in this repo.
 
 ## Icon attribution
 

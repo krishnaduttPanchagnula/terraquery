@@ -45,17 +45,20 @@ changelog:
       - "^test:"
       - "^chore:"
 
-brews:
+homebrew_casks:
   - name: terraquery
-    directory: Formula
+    binaries:
+      - terraquery
+    directory: Casks
     repository:
       owner: krishnaduttPanchagnula
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     homepage: https://github.com/krishnaduttPanchagnula/terraquery
     description: Cross-state Terraform dependency resolver with a visual dashboard
-    license: MIT
-    skip_upload: true
+    caveats: >-
+      If macOS blocks the binary, run:
+      xattr -d com.apple.quarantine $(brew --prefix)/bin/terraquery
 
 release:
   github:
